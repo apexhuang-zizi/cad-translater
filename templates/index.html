@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF 图纸翻译 / Dịch bản vẽ PDF</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<div class="header">
+    <h1>PDF 图纸翻译 / Dịch bản vẽ PDF</h1>
+    <span class="header-info">CAD图纸中文/英文注释 → 越南语 | Chú thích CAD → Tiếng Việt</span>
+</div>
+
+<div class="container">
+    <!-- Steps -->
+    <div class="steps">
+        <div class="step active" data-step="0">1. 上传 / Tải lên PDF</div>
+        <div class="step" data-step="1">2. 扫描 / Quét & Báo cáo</div>
+        <div class="step" data-step="2">3. 审核 / Xem lại & Sửa</div>
+        <div class="step" data-step="3">4. 保存 / Lưu kết quả</div>
+    </div>
+
+    <!-- Phase 0: Upload -->
+    <div id="phase-upload" class="phase">
+        <div class="card">
+            <h3>翻译设置 / Cài đặt dịch</h3>
+            <div class="engine-selector">
+                <div class="engine-btn active" data-engine="google">Google 翻译 / Dịch</div>
+                <div class="engine-btn" data-engine="deepseek">DeepSeek AI</div>
+                <div class="engine-btn" data-engine="gemini">Gemini AI</div>
+            </div>
+            <div id="api-key-section" class="hidden" style="margin-top:12px">
+                <label id="api-key-label" style="font-size:0.85rem;font-weight:500">API Key 密钥 / Khóa:</label>
+                <input type="password" id="deepseek-key" placeholder="sk-..." style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;margin:4px 0;display:none">
+                <input type="password" id="gemini-key" placeholder="AIza..." style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px;margin:4px 0;display:none">
+                <button class="btn btn-sm btn-outline" id="btn-test-key">测试 / Kiểm tra</button>
+                <span style="font-size:0.75rem;color:var(--text-muted);margin-left:8px">密钥仅存在浏览器本地 / Chỉ lưu trong trình duyệt</span>
+            </div>
+        </div>
+
+        <div id="upload-zone" class="upload-zone">
+            <div class="icon">PDF</div>
+            <h3>拖放PDF图纸或点击选择 / Kéo thả bản vẽ PDF vào đây</h3>
+            <p>点击选择 / Nhấn để chọn | 支持CAD矢量&amp;栅格PDF</p>
+            <input type="file" id="file-input" accept=".pdf">
+        </div>
+        <div id="upload-status" class="hidden text-center" style="padding:40px">
+            <span class="spinner"></span>
+            <p id="upload-filename" style="margin-top:12px;color:var(--text-muted)">上传中… / Đang tải lên...</p>
+        </div>
+    </div>
+
+    <!-- Phase 1: Scan Report -->
+    <div id="phase-scan" class="phase hidden">
+        <div class="scan-report card">
+            <h3>扫描结果 / Kết quả quét</h3>
+            <table style="margin:16px auto;border-collapse:collapse">
+                <tr>
+                    <td style="padding:8px 20px;text-align:center">
+                        <div class="count" id="scan-total-pages">-</div>
+                        <div class="label">总页数 / Tổng số trang</div>
+                    </td>
+                    <td style="padding:8px 20px;text-align:center">
+                        <div class="count" id="scan-text-pages">-</div>
+                        <div class="label">有注释的页 / Trang có chú thích</div>
+                    </td>
+                </tr>
+            </table>
+            <p id="scan-status" style="color:var(--text-muted)"></p>
+            <p id="scan-result-msg" class="hidden"></p>
+
+            <h4 style="margin-top:20px">页面概览 / Tổng quan trang</h4>
+            <div id="page-thumb-grid" class="page-grid"></div>
+
+            <div class="btn-group" style="justify-content:center;margin-top:16px">
+                <button class="btn btn-outline" onclick="location.reload()">退出 / Thoát</button>
+                <button class="btn btn-primary hidden" id="btn-scan-next"
+                        onclick="App.startReview(App.pagesWithText[0])">
+                    开始审核 / Bắt đầu xem lại
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Phase 2: Review -->
+    <div id="phase-review" class="phase hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+            <div>
+                <strong id="review-filename"></strong>
+                <span id="page-indicator" style="margin-left:16px;color:var(--text-muted)"></span>
+            </div>
+            <div class="btn-group">
+                <button class="btn btn-sm btn-outline" id="btn-manual-mode" title="点击图纸添加注释 / Nhấn vào bản vẽ để thêm chú thích">+ 手动标定 / Đánh dấu thủ công</button>
+                <button class="btn btn-sm btn-outline" id="btn-template-save" title="保存为模板 / Lưu mẫu">保存模板 / Lưu mẫu</button>
+                <button class="btn btn-sm btn-outline" id="btn-overlay">预览 / Xem trước</button>
+                <button class="btn btn-sm btn-primary" id="btn-translate">翻译 / Dịch</button>
+            </div>
+        </div>
+
+        <!-- Manual calibration toolbar -->
+        <div id="manual-toolbar" class="hidden card" style="margin-bottom:12px;padding:12px">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <span style="font-weight:600;color:var(--primary)">手动标定模式 / Chế độ đánh dấu thủ công:</span>
+                <span style="font-size:0.85rem;color:var(--text-muted)">点击图纸位置添加注释 / Nhấn vào bản vẽ để thêm chú thích</span>
+                <button class="btn btn-sm btn-outline" id="btn-manual-done">完成 / Hoàn tất</button>
+                <button class="btn btn-sm btn-outline" id="btn-manual-clear">清空 / Xóa hết</button>
+            </div>
+        </div>
+
+        <!-- Template save dialog -->
+        <div id="template-dialog" class="hidden card" style="margin-bottom:12px;padding:12px">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <label>模板名称 / Tên mẫu: <input type="text" id="template-name" placeholder="如: 家具首件记录模板" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px"></label>
+                <label>类型 / Loại: <input type="text" id="template-type" placeholder="furniture_first_piece" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px"></label>
+                <button class="btn btn-sm btn-primary" id="btn-template-save-confirm">保存 / Lưu</button>
+                <button class="btn btn-sm btn-outline" id="btn-template-cancel">取消 / Hủy</button>
+            </div>
+        </div>
+
+        <!-- AI Vision / Template fallback notice -->
+        <div id="fallback-notice" class="hidden card" style="margin-bottom:12px;padding:12px;background:#fff3e0;border-left:4px solid #e65100">
+            <div style="display:flex;align-items:center;gap:12px">
+                <span style="font-size:1.2rem">&#9888;</span>
+                <div>
+                    <div style="font-weight:600;color:#e65100" id="fallback-title">OCR未检测到文字 / OCR không phát hiện được chữ</div>
+                    <div style="font-size:0.85rem;color:var(--text-muted)" id="fallback-msg">请使用手动标定模式点击图纸添加注释 / Vui lòng dùng chế độ đánh dấu thủ công</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="workspace">
+            <!-- Left: PDF Preview -->
+            <div class="workspace-preview" id="workspace-preview">
+                <button class="btn-maximize" id="btn-maximize" title="Phóng to">⛶</button>
+                <div class="pdf-viewer" id="pdf-viewer">
+                    <canvas></canvas>
+                    <div class="overlay-layer"></div>
+                </div>
+            </div>
+
+            <!-- Right: Review Panel -->
+            <div class="workspace-panel">
+                <div class="card" style="position:sticky;top:0">
+                    <h3>审核翻译 / Xem lại bản dịch</h3>
+                    <div id="review-items">
+                        <p style="color:var(--text-muted)">请选择页面开始 / Chọn một trang để bắt đầu</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="btn-group" style="justify-content:center;margin-top:16px">
+            <button class="btn btn-outline" id="btn-prev-page">上一页 / Trang trước</button>
+            <button class="btn btn-success" id="btn-confirm-page">确认&amp;继续 / Xác nhận &amp; Tiếp</button>
+            <button class="btn btn-outline" id="btn-next-page">下一页 / Trang sau</button>
+            <button class="btn btn-primary hidden" id="btn-save-all">全部保存 / Lưu tất cả</button>
+            <button class="btn btn-outline" onclick="location.reload()">退出 / Thoát</button>
+        </div>
+    </div>
+
+    <!-- Phase 3: Done -->
+    <div id="phase-done" class="phase hidden">
+        <div class="card" style="text-align:center;padding:40px">
+            <div style="font-size:3rem;margin-bottom:16px">&#10004;</div>
+            <h2>翻译完成 / Hoàn tất dịch</h2>
+            <p style="color:var(--text-muted);margin:12px 0">
+                翻译后PDF已就绪 / Bản PDF đã dịch sẵn sàng:
+                <strong id="done-filename"></strong>
+            </p>
+            <div class="btn-group" style="justify-content:center;margin-top:20px">
+                <a id="done-download" class="btn btn-primary" download>下载PDF / Tải PDF</a>
+                <button class="btn btn-outline" onclick="location.reload()">重新开始 / Bắt đầu mới</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Engine key visibility toggle
+document.querySelectorAll(".engine-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        const engine = btn.dataset.engine;
+        document.getElementById("deepseek-key").style.display = engine === "deepseek" ? "" : "none";
+        document.getElementById("gemini-key").style.display = engine === "gemini" ? "" : "none";
+    });
+});
+</script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/viewer.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>

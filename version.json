@@ -1,0 +1,16 @@
+{
+  "version": "2.0.0",
+  "build": 1,
+  "name": "CAD PDF Translator",
+  "codename": "Furniture Edition",
+  "release_date": "2026-06-12",
+  "release_notes": "Phase 1 upgrades: EasyOCR replacement, JSON translation format, synonym normalization, enterprise glossary with placeholders, Translation Memory",
+  "min_requirements": {
+    "python": ">=3.9",
+    "tesseract": ">=5.0",
+    "ram_mb": 2048,
+    "disk_mb": 500
+  },
+  "update_url": "https://github.com/15364/cad-translator/releases/latest/download/version.json",
+  "download_url": "https://github.com/15364/cad-translator/releases/latest/download/CAD-Translator-Setup.exe"
+}

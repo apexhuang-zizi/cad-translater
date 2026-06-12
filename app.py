@@ -19,6 +19,7 @@ from backend.pdf_processor import (
     merge_adjacent_items, filter_translatable_items,
     render_page_preview, apply_translations,
     apply_translations_with_draft,
+    apply_translations_numbered,
 )
 from backend.ocr_engine import ocr_page, is_tesseract_available, get_available_languages
 from backend.surya_ocr import run_raster_ocr, is_surya_available
@@ -28,6 +29,10 @@ from backend.frame_detector import detect_frame, is_in_frame
 from backend.template_manager import (
     init_template_tables, save_template, get_template, list_templates,
     find_matching_template, delete_template, apply_template_to_page,
+)
+from backend.dxf_processor import (
+    extract_text_entities, extract_geometry_bboxes, classify_entities,
+    get_dxf_bounds, create_annotated_dxf, create_numbered_annotations_dxf,
 )
 from backend.storage import (
     init_db, create_project, get_project, update_project_status,
@@ -42,7 +47,7 @@ UPLOAD_DIR = os.path.join(BASE_DIR, "uploads")
 PREVIEW_DIR = os.path.join(BASE_DIR, "data", "previews")
 OUTPUT_DIR = os.path.join(BASE_DIR, "data", "output")
 DB_PATH = os.path.join(BASE_DIR, "data", "cad_translator.db")
-FONT_PATH = os.path.join(BASE_DIR, "fonts", "NotoSansCJK-VF.ttf")
+FONT_PATH = os.path.join(BASE_DIR, "fonts", "NotoSans-VF.ttf")
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(PREVIEW_DIR, exist_ok=True)
@@ -565,6 +570,9 @@ def api_translate_page(file_id, page_num):
     engine = data.get("engine", "google")
     api_key = data.get("api_key", "")
     items = data.get("items", [])
+    use_tm = data.get("use_tm", True)
+    use_glossary = data.get("use_glossary", True)
+    use_synonyms = data.get("use_synonyms", True)
     
     if not items:
         page_data = get_page_data(file_id, page_num)
@@ -576,21 +584,33 @@ def api_translate_page(file_id, page_num):
     texts = [item.get("text", "") for item in items]
     
     try:
-        results = translate(texts, engine=engine, api_key=api_key or None)
+        results = translate(
+            texts, engine=engine, api_key=api_key or None,
+            use_tm=use_tm, use_glossary=use_glossary, use_synonyms=use_synonyms
+        )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         return jsonify({"error": f"Translation failed: {str(e)}"}), 500
     
     response_items = []
+    from_tm_count = 0
+    synonym_count = 0
     for i, item in enumerate(items):
         r = dict(item)
         r["original"] = item.get("text", "")
+        r["normalized"] = results[i].get("normalized", "") if i < len(results) else ""
         r["translated"] = results[i]["translated"] if i < len(results) else ""
         r["engine"] = engine
         r["success"] = results[i]["success"] if i < len(results) else False
+        r["from_tm"] = results[i].get("from_tm", False) if i < len(results) else False
+        r["synonym_applied"] = results[i].get("synonym_applied", False) if i < len(results) else False
         if not r["success"] and i < len(results):
             r["error"] = results[i].get("error", "")
+        if r.get("from_tm"):
+            from_tm_count += 1
+        if r.get("synonym_applied"):
+            synonym_count += 1
         response_items.append(r)
     
     save_translation_items(file_id, page_num, response_items)
@@ -598,6 +618,11 @@ def api_translate_page(file_id, page_num):
     return jsonify({
         "engine": engine,
         "items": response_items,
+        "stats": {
+            "total": len(response_items),
+            "from_tm": from_tm_count,
+            "synonym_applied": synonym_count,
+        },
     })
 
 
@@ -680,6 +705,72 @@ def api_overlay_preview(file_id, page_num):
     preview_img = os.path.join(PREVIEW_DIR, f"{file_id}_p{page_num}_preview.png")
     if not os.path.exists(preview_img):
         return jsonify({"error": "Preview not generated yet"}), 404
+    return send_file(preview_img, mimetype="image/png")
+
+
+@app.route("/api/pdf/<file_id>/page/<int:page_num>/overlay-numbered", methods=["POST"])
+def api_overlay_numbered(file_id, page_num):
+    """Apply translations using numbered markers: circled numbers at original
+    positions, translation table in a large empty zone. No content overlap."""
+    project = get_project(file_id)
+    if not project:
+        return jsonify({"error": "Project not found"}), 404
+    
+    data = request.get_json() or {}
+    items = data.get("items", [])
+    
+    if not items:
+        items = get_translation_items(file_id, page_num)
+    
+    if not items:
+        return jsonify({"error": "No translation items"}), 400
+    
+    translations = []
+    for item in items:
+        text = item.get("confirmed_translation") or item.get("translated", "")
+        if not text:
+            continue
+        translations.append({
+            "text": item.get("original", item.get("text", "")),
+            "bbox": item.get("bbox", [0, 0, 100, 20]),
+            "translated_text": text,
+        })
+    
+    if not translations:
+        return jsonify({"error": "No confirmed translations to overlay"}), 400
+    
+    output_path = os.path.join(OUTPUT_DIR, f"{file_id}_p{page_num}_numbered.pdf")
+    
+    try:
+        apply_translations_numbered(
+            project["original_path"], page_num, translations, output_path,
+            font_path=FONT_PATH if os.path.exists(FONT_PATH) else None,
+        )
+    except Exception as e:
+        return jsonify({"error": f"Numbered overlay failed: {str(e)}"}), 500
+    
+    # Generate preview
+    import fitz
+    doc = fitz.open(output_path)
+    page = doc[page_num if page_num < len(doc) else 0]
+    mat = fitz.Matrix(200 / 72, 200 / 72)
+    pix = page.get_pixmap(matrix=mat)
+    preview_img = os.path.join(PREVIEW_DIR, f"{file_id}_p{page_num}_numbered_preview.png")
+    pix.save(preview_img)
+    doc.close()
+    
+    return jsonify({
+        "preview_url": f"/api/pdf/{file_id}/page/{page_num}/preview/numbered",
+        "mode": "numbered",
+    })
+
+
+@app.route("/api/pdf/<file_id>/page/<int:page_num>/preview/numbered", methods=["GET"])
+def api_numbered_preview(file_id, page_num):
+    """Serve numbered markers preview image."""
+    preview_img = os.path.join(PREVIEW_DIR, f"{file_id}_p{page_num}_numbered_preview.png")
+    if not os.path.exists(preview_img):
+        return jsonify({"error": "Numbered preview not generated yet"}), 404
     return send_file(preview_img, mimetype="image/png")
 
 
@@ -885,6 +976,160 @@ def api_test_engine():
 
 
 # ============================================================
+# Translator v2: Glossary, Synonyms, TM Management
+# ============================================================
+
+from backend.translator import (
+    load_glossary, save_glossary, add_glossary_term, remove_glossary_term,
+    load_synonym_map, save_synonym_map, add_synonym, remove_synonym,
+    load_tm, save_tm, add_tm_entry, get_tm_stats,
+)
+
+
+@app.route("/api/translator/glossary", methods=["GET"])
+def api_get_glossary():
+    """Get all glossary terms."""
+    glossary = load_glossary()
+    items = [{"chinese": k, "vietnamese": v} for k, v in sorted(glossary.items())]
+    return jsonify({"glossary": items, "count": len(items)})
+
+
+@app.route("/api/translator/glossary", methods=["POST"])
+def api_add_glossary():
+    """Add or update a glossary term."""
+    data = request.get_json() or {}
+    chinese = data.get("chinese", "").strip()
+    vietnamese = data.get("vietnamese", "").strip()
+    if not chinese or not vietnamese:
+        return jsonify({"error": "chinese and vietnamese are required"}), 400
+    add_glossary_term(chinese, vietnamese)
+    return jsonify({"status": "ok", "chinese": chinese, "vietnamese": vietnamese})
+
+
+@app.route("/api/translator/glossary/<term>", methods=["DELETE"])
+def api_delete_glossary(term):
+    """Delete a glossary term."""
+    if remove_glossary_term(term):
+        return jsonify({"status": "deleted", "term": term})
+    return jsonify({"error": "Term not found"}), 404
+
+
+@app.route("/api/translator/synonyms", methods=["GET"])
+def api_get_synonyms():
+    """Get all synonym mappings."""
+    sm = load_synonym_map()
+    items = [{"variant": k, "standard": v} for k, v in sorted(sm.items())]
+    return jsonify({"synonyms": items, "count": len(items)})
+
+
+@app.route("/api/translator/synonyms", methods=["POST"])
+def api_add_synonym():
+    """Add a synonym mapping."""
+    data = request.get_json() or {}
+    variant = data.get("variant", "").strip()
+    standard = data.get("standard", "").strip()
+    if not variant or not standard:
+        return jsonify({"error": "variant and standard are required"}), 400
+    add_synonym(variant, standard)
+    return jsonify({"status": "ok", "variant": variant, "standard": standard})
+
+
+@app.route("/api/translator/synonyms/<variant>", methods=["DELETE"])
+def api_delete_synonym(variant):
+    """Delete a synonym mapping."""
+    result = remove_synonym(variant)
+    if result:
+        return jsonify({"status": "deleted", "variant": variant})
+    return jsonify({"error": "Synonym not found"}), 404
+
+
+@app.route("/api/translator/tm", methods=["GET"])
+def api_get_tm():
+    """Get translation memory entries."""
+    tm = load_tm()
+    stats = get_tm_stats()
+    items = [{"source": k, "translation": v} for k, v in sorted(tm.items())]
+    return jsonify({"entries": items, "stats": stats})
+
+
+@app.route("/api/translator/tm/export", methods=["GET"])
+def api_export_tm():
+    """Export translation memory as JSON download."""
+    from backend.translator import TM_PATH
+    if os.path.exists(TM_PATH):
+        return send_file(TM_PATH, mimetype="application/json",
+                        as_attachment=True, download_name="translation_memory.json")
+    return jsonify({"error": "TM file not found"}), 404
+
+
+@app.route("/api/translator/tm/import", methods=["POST"])
+def api_import_tm():
+    """Import translation memory from JSON file."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    file = request.files["file"]
+    try:
+        data = json.loads(file.read())
+        if not isinstance(data, dict):
+            return jsonify({"error": "Invalid format: expected JSON object"}), 400
+        current = load_tm()
+        current.update(data)
+        save_tm(current)
+        return jsonify({"status": "ok", "imported": len(data), "total_entries": len(current)})
+    except Exception as e:
+        return jsonify({"error": f"Import failed: {str(e)}"}), 400
+
+
+@app.route("/api/translator/tm/clear", methods=["POST"])
+def api_clear_tm():
+    """Clear all translation memory entries."""
+    save_tm({})
+    return jsonify({"status": "cleared"})
+
+
+@app.route("/api/translator/test", methods=["POST"])
+def api_translator_test():
+    """Test the translation pipeline with custom text."""
+    data = request.get_json() or {}
+    texts = data.get("texts", [])
+    engine = data.get("engine", "google")
+    api_key = data.get("api_key", "")
+    use_tm = data.get("use_tm", True)
+    use_glossary = data.get("use_glossary", True)
+    use_synonyms = data.get("use_synonyms", True)
+    
+    if not texts:
+        texts = ["层板", "活动板", "三合一连接件", "侧板钻孔图"]
+    
+    try:
+        results = translate(
+            texts, engine=engine, api_key=api_key or None,
+            use_tm=use_tm, use_glossary=use_glossary, use_synonyms=use_synonyms
+        )
+        return jsonify({
+            "engine": engine,
+            "pipeline": {
+                "synonyms_enabled": use_synonyms,
+                "glossary_enabled": use_glossary,
+                "tm_enabled": use_tm,
+            },
+            "stats": get_tm_stats(),
+            "results": [
+                {
+                    "original": r["original"],
+                    "normalized": r.get("normalized", ""),
+                    "translated": r["translated"],
+                    "from_tm": r.get("from_tm", False),
+                    "synonym_applied": r.get("synonym_applied", False),
+                }
+                for r in results
+            ],
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ============================================================
 # Project Status / Resume
 # ============================================================
 
@@ -911,6 +1156,195 @@ def api_project_status(file_id):
 
 
 # ============================================================
+# Auto-Update
+# ============================================================
+
+@app.route("/api/version", methods=["GET"])
+def api_version():
+    """Get local version info."""
+    from updater import get_local_version
+    return jsonify(get_local_version())
+
+
+@app.route("/api/version/check", methods=["GET"])
+def api_check_update():
+    """Check for updates."""
+    from updater import check_for_updates
+    return jsonify(check_for_updates())
+
+
+# ============================================================
+# Main
+# ============================================================
+
+# ============================================================
+# DXF Import & Processing
+# ============================================================
+
+@app.route("/api/dxf/upload", methods=["POST"])
+def api_dxf_upload():
+    """Upload a DXF file, extract text & geometry."""
+    if "file" not in request.files:
+        return jsonify({"error": "No file provided"}), 400
+    
+    file = request.files["file"]
+    if not file.filename or not file.filename.lower().endswith(".dxf"):
+        return jsonify({"error": "Only DXF files (.dxf) are supported"}), 400
+    
+    file_id = uuid.uuid4().hex[:12]
+    save_path = os.path.join(UPLOAD_DIR, f"{file_id}.dxf")
+    file.save(save_path)
+    
+    try:
+        bounds = get_dxf_bounds(save_path)
+        entities = extract_text_entities(save_path)
+        geometry_count = len(extract_geometry_bboxes(save_path))
+    except Exception as e:
+        os.remove(save_path)
+        return jsonify({"error": f"Failed to read DXF: {str(e)}"}), 400
+    
+    translatable, skipped = classify_entities(entities)
+    
+    return jsonify({
+        "file_id": file_id,
+        "filename": file.filename,
+        "total_entities": len(entities),
+        "translatable_count": len(translatable),
+        "skipped_count": len(skipped),
+        "geometry_objects": geometry_count,
+        "bounds": bounds,
+        "entities": translatable,
+        "skipped": [{"text": s["text"], "reason": s.get("reason", "unknown")} for s in skipped],
+    })
+
+
+@app.route("/api/dxf/<file_id>/extract", methods=["GET"])
+def api_dxf_extract(file_id):
+    """Extract text entities from an uploaded DXF."""
+    dxf_path = os.path.join(UPLOAD_DIR, f"{file_id}.dxf")
+    if not os.path.exists(dxf_path):
+        return jsonify({"error": "DXF file not found"}), 404
+    
+    entities = extract_text_entities(dxf_path)
+    translatable, skipped = classify_entities(entities)
+    bounds = get_dxf_bounds(dxf_path)
+    geometry_count = len(extract_geometry_bboxes(dxf_path))
+    
+    return jsonify({
+        "file_id": file_id,
+        "total_entities": len(entities),
+        "translatable_count": len(translatable),
+        "skipped_count": len(skipped),
+        "geometry_objects": geometry_count,
+        "bounds": bounds,
+        "entities": translatable,
+        "skipped": [{"text": s["text"], "reason": s.get("reason", "unknown")} for s in skipped],
+    })
+
+
+@app.route("/api/dxf/<file_id>/translate", methods=["POST"])
+def api_dxf_translate(file_id):
+    """Translate extracted DXF text entities."""
+    dxf_path = os.path.join(UPLOAD_DIR, f"{file_id}.dxf")
+    if not os.path.exists(dxf_path):
+        return jsonify({"error": "DXF file not found"}), 404
+    
+    data = request.get_json() or {}
+    engine = data.get("engine", "google")
+    api_key = data.get("api_key", "")
+    items = data.get("items", [])
+    use_tm = data.get("use_tm", True)
+    use_glossary = data.get("use_glossary", True)
+    use_synonyms = data.get("use_synonyms", True)
+    
+    if not items:
+        entities = extract_text_entities(dxf_path)
+        translatable, _ = classify_entities(entities)
+        items = translatable
+    
+    if not items:
+        return jsonify({"error": "No translatable text found"}), 400
+    
+    texts = [item.get("text", "") for item in items]
+    
+    try:
+        results = translate(
+            texts, engine=engine, api_key=api_key or None,
+            use_tm=use_tm, use_glossary=use_glossary, use_synonyms=use_synonyms
+        )
+    except Exception as e:
+        return jsonify({"error": f"Translation failed: {str(e)}"}), 500
+    
+    from_tm_count = 0
+    response_items = []
+    for i, item in enumerate(items):
+        r = dict(item)
+        r["original"] = item.get("text", "")
+        r["translated"] = results[i]["translated"] if i < len(results) else ""
+        r["normalized"] = results[i].get("normalized", "") if i < len(results) else ""
+        r["success"] = results[i]["success"] if i < len(results) else False
+        r["from_tm"] = results[i].get("from_tm", False) if i < len(results) else False
+        r["synonym_applied"] = results[i].get("synonym_applied", False) if i < len(results) else False
+        if r.get("from_tm"):
+            from_tm_count += 1
+        response_items.append(r)
+    
+    return jsonify({
+        "engine": engine,
+        "items": response_items,
+        "stats": {
+            "total": len(response_items),
+            "from_tm": from_tm_count,
+        },
+    })
+
+
+@app.route("/api/dxf/<file_id>/export", methods=["POST"])
+def api_dxf_export(file_id):
+    """Export annotated DXF with Vietnamese translations."""
+    dxf_path = os.path.join(UPLOAD_DIR, f"{file_id}.dxf")
+    if not os.path.exists(dxf_path):
+        return jsonify({"error": "DXF file not found"}), 404
+    
+    data = request.get_json() or {}
+    mode = data.get("mode", "annotated")  # "annotated" or "numbered"
+    translations = data.get("translations", [])
+    
+    if not translations:
+        return jsonify({"error": "No translations provided"}), 400
+    
+    output_path = os.path.join(OUTPUT_DIR, f"{file_id}_vi.dxf")
+    
+    try:
+        if mode == "numbered":
+            create_numbered_annotations_dxf(dxf_path, translations, output_path)
+        else:
+            create_annotated_dxf(dxf_path, translations, output_path)
+    except Exception as e:
+        return jsonify({"error": f"Export failed: {str(e)}"}), 500
+    
+    return jsonify({
+        "output_path": output_path,
+        "mode": mode,
+        "download_url": f"/api/dxf/{file_id}/download",
+    })
+
+
+@app.route("/api/dxf/<file_id>/download", methods=["GET"])
+def api_dxf_download(file_id):
+    """Download the annotated DXF file."""
+    output_path = os.path.join(OUTPUT_DIR, f"{file_id}_vi.dxf")
+    if not os.path.exists(output_path):
+        return jsonify({"error": "Annotated DXF not generated yet. POST to /api/dxf/{file_id}/export first."}), 404
+    return send_file(
+        output_path,
+        mimetype="application/dxf",
+        as_attachment=True,
+        download_name=f"cad_translated_{file_id}.dxf",
+    )
+
+
+# ============================================================
 # Main
 # ============================================================
 
@@ -920,4 +1354,5 @@ if __name__ == "__main__":
     print("  Vector | AI Vision | Template | Manual")
     print("  Open http://localhost:5000 in your browser")
     print("=" * 60)
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)

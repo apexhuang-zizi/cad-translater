@@ -1,22 +1,27 @@
-# CAD Translator (PDF图纸翻译)
+# CAD PDF Translator v2.0 — Furniture Edition
 
 CAD工程图纸中文/英文注释 → 越南语自动翻译工具。
 支持矢量PDF直接提取 + 栅格PDF智能OCR，译文原地叠加。
 
+## v2.0 新特性
+
+| 特性 | 说明 |
+|------|------|
+| **EasyOCR 替换 Surya** | 解决 Windows Surya 模型加载问题，121 MB模型，CPU可用 |
+| **JSON 格式翻译** | 结构化返回，替换旧版 `---` 分隔符 |
+| **同义词归一化** | 36条家具行业规则（活动层板→层板） |
+| **企业术语库** | 29条默认家具术语（中文→越南语），管道占位符保护 |
+| **翻译记忆 (TM)** | dict+JSON文件缓存，重复项零API调用 |
+| **自更新检查** | `/api/version/check` 自动核对云端版本号 |
+
 ## 架构
 
 ```
-上传PDF → 类型检测 → 矢量提取/Surya OCR → 翻译 → V11叠加 → 逐页审核 → 导出
+上传PDF → 类型检测 → 矢量提取/EasyOCR+Tesseract
+                    → 同义词归一化 → 术语占位符 → TM查找
+                    → AI/Google翻译 → 还原术语 → TM缓存
+                    → V11智能叠加 → 逐页审核 → 导出
 ```
-
-### 核心技术矩阵
-
-| PDF类型 | 提取方式 | 准确度 |
-|---------|---------|--------|
-| 矢量CAD PDF | PyMuPDF 直接提取文本+坐标 | ★★★★★ |
-| 栅格CAD PDF | Surya检测 + Tesseract逐区域OCR | ★★★★☆ |
-| AI视觉 | Gemini Vision API（需密钥） | ★★★★☆ |
-| 模板复用 | 人工标定 → 模板匹配 | ★★★★☆ |
 
 ## 快速开始
 
@@ -26,59 +31,103 @@ pip install -r requirements.txt
 
 # 2. 安装 Tesseract OCR（Windows）
 # 下载：https://github.com/UB-Mannheim/tesseract/wiki
-# 安装时勾选 chi_sim (简体中文) 和 eng (英文) 语言包
+# 安装时勾选 chi_sim + eng 语言包
 
 # 3. 启动服务
-python app.py
+start.bat
+# 或: python app.py
 
 # 4. 打开浏览器
 # http://localhost:5000
 ```
 
-## 使用流程
+## 翻译管道 (v2)
 
-1. **上传PDF** — 拖放或选择CAD图纸PDF文件
-2. **自动扫描** — 检测矢量/栅格类型，运行对应OCR
-3. **逐页审核** — 确认/修改/手动标定译文，Canvas拖拽微调
-4. **导出** — 生成带越南语注释的PDF
+```
+text → normalize(同义词) → glossary_placeholder(术语占位符)
+     → TM_lookup(缓存命中则跳过API) → AI/Google(仅未命中)
+     → restore(还原术语) → TM_cache(保存结果)
+```
 
-## 翻译引擎
+### 支持引擎
 
-- **Google Translate** — 免费，无需API密钥
-- **DeepSeek AI** — 需API密钥，工程术语更准确
-- **Gemini AI** — 需API密钥，支持视觉OCR
+| 引擎 | 需要 API Key | 成本 | 推荐场景 |
+|------|-------------|------|---------|
+| Google | 否 | 免费 | 日常使用 |
+| DeepSeek | 是 | $0.14/M tokens | 专业术语 |
+| Gemini | 是 | 免费额度 | 混合中英 |
+
+## API 端点
+
+### 翻译
+- `POST /api/translate` — 批量翻译
+- `POST /api/translator/test` — 管道测试
+
+### 术语管理
+- `GET/POST /api/translator/glossary` — 术语库 CRUD
+- `DELETE /api/translator/glossary/<term>`
+- `GET/POST /api/translator/synonyms` — 同义词 CRUD
+- `DELETE /api/translator/synonyms/<variant>`
+
+### 翻译记忆
+- `GET /api/translator/tm` — 查看 TM
+- `GET /api/translator/tm/export` — 导出 JSON
+- `POST /api/translator/tm/import` — 导入 JSON
+- `POST /api/translator/tm/clear` — 清空
+
+### 版本
+- `GET /api/version` — 本地版本
+- `GET /api/version/check` — 检查更新
 
 ## 项目结构
 
 ```
 cad-translator/
-├── app.py                 # Flask 主应用
-├── requirements.txt       # Python 依赖
+├── app.py                  # Flask 主应用
+├── updater.py              # 自更新模块
+├── build_installer.py      # 打包脚本
+├── version.json            # 版本信息
+├── start.bat               # 启动脚本
+├── requirements.txt
 ├── templates/
-│   └── index.html         # SPA 前端
+│   └── index.html          # SPA 前端 + v2 设置面板
 ├── static/
 │   ├── css/style.css
 │   └── js/
-│       ├── api.js         # API 通信
-│       ├── app.js         # 主逻辑
-│       └── viewer.js      # Canvas 查看器
-└── backend/
-    ├── pdf_processor.py   # PDF 文本提取 + V11 叠加
-    ├── surya_ocr.py       # Surya检测 + Tesseract 栅格OCR
-    ├── ocr_engine.py      # Tesseract 回退 OCR
-    ├── ai_vision_engine.py # Gemini Vision OCR
-    ├── translator.py      # 翻译引擎
-    ├── frame_detector.py  # 图框检测
-    ├── template_manager.py # 标定模板管理
-    └── storage.py         # SQLite 持久化
+│       ├── api.js
+│       ├── app.js
+│       └── viewer.js
+├── backend/
+│   ├── pdf_processor.py    # 矢量提取 + V11 叠加
+│   ├── surya_ocr.py        # EasyOCR检测 + Tesseract识别
+│   ├── ocr_engine.py       # Tesseract 回退
+│   ├── ai_vision_engine.py  # Gemini Vision
+│   ├── translator.py       # v2 翻译管道
+│   ├── frame_detector.py   # 图框检测
+│   ├── template_manager.py  # 模板匹配
+│   └── storage.py          # SQLite 持久化
+└── data/
+    ├── glossary.json        # 企业术语库
+    ├── synonym_map.json     # 同义词映射
+    └── translation_memory.json  # TM 缓存
 ```
 
 ## 外部依赖
 
-- **Tesseract OCR 5.x** — 栅格PDF文字识别
-  - 语言包：chi_sim (简体中文) + eng (英文)
-  - 默认安装路径：`C:\Program Files\Tesseract-OCR\`
-- **Surya** — 文字区域检测模型（首次运行自动下载 ~200MB）
+- **Tesseract OCR 5.x** — 栅格文字识别（chi_sim + eng 语言包）
+- **EasyOCR** — 文本区域检测（自动安装，121 MB）
+
+## 打包发布
+
+```bash
+# 生成 ZIP + Inno Setup 脚本
+python build_installer.py
+
+# 仅 ZIP
+python build_installer.py --zip
+
+# 更新版本号：编辑 version.json
+```
 
 ## 许可
 

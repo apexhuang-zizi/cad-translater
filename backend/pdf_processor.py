@@ -125,21 +125,28 @@ def merge_adjacent_items(items: List[Dict], gap_threshold: float = 20.0,
 # View label patterns to exclude from translation
 VIEW_LABELS = re.compile(
     r'(正视图|前视图|后视图|左视图|右视图|仰视图|俯视图|剖视图|'
-    r'展开图|装配图|大样图|详图|剖面图|断面图|示意图|'
+    r'展开图|装配图|大样图|详图|剖面图|断面图|示意图|背视图|'
+    r'等轴测图|三视图|底视图|顶视图|侧视图|局部详图|安装图|'
+    r'平面图|立面图|节点详图|节点图|大样|定位图|开料图|'
+    r'排钻图|孔位图|结构图|分件图|部件图|组装图|包装图|'
     r'FRONT\s*VIEW|BACK\s*VIEW|LEFT\s*VIEW|RIGHT\s*VIEW|'
     r'TOP\s*VIEW|BOTTOM\s*VIEW|SECTION\s*VIEW|DETAIL\s*VIEW|'
+    r'SIDE\s*VIEW|ISOMETRIC\s*VIEW|EXPLODED\s*VIEW|'
     r'SECTION|DETAIL|ELEVATION|PLAN|'
     r'VIEW\s*[A-Z]|[A-Z]\s*VIEW|'
-    r'A-A|B-B|C-C|D-D|E-E)',
+    r'A-A|B-B|C-C|D-D|E-E|'
+    r'Drawing\s*Title|Drawing Title|\u56fe\u7eb8\u540d\u79f0|图纸名称)',
     re.IGNORECASE
 )
 
 FRAME_KEYWORDS = re.compile(
     r'(PROJECT|DWG|TITLE|SCALE|DATE|DRAWN|CHECKED|APPROVED|'
     r'REV|SHEET|MATERIAL|FINISH|QTY|DIMENSION|UNIT|'
-    r'TOLERANCE|WEIGHT|SURFACE|NOTES|'
+    r'TOLERANCE|WEIGHT|SURFACE|NOTES|SPECIFICATION|'
     r'图纸编号|图号|比例|日期|设计|审核|批准|'
-    r'版本|页数|材料|表面处理|数量|单位)',
+    r'版本|页数|材料|表面处理|数量|单位|'
+    r'页码|共.*页|第.*页|比例尺|绘图|校对|'
+    r'客户|项目名称|项目编号|图纸名称|图名)',
     re.IGNORECASE
 )
 
@@ -525,6 +532,149 @@ def apply_translations_with_draft(pdf_path: str, page_num: int,
         placed_boxes.append(position["bbox"])
         item["placed_bbox"] = position["bbox"]
 
+    doc.save(output_path)
+    doc.close()
+    return output_path
+
+
+# --- Numbered Markers Mode (Compact Table Layout) ---
+
+def find_largest_empty_zone(page_rect: List[float], placed_boxes: List[List[float]],
+                            min_width: float = 200, min_height: float = 100) -> Optional[List[float]]:
+    """Find the largest rectangular empty zone on the page where a translation
+    table can be placed without overlapping any existing content."""
+    pw, ph = page_rect[2], page_rect[3]
+    
+    candidates = [
+        {"name": "right-strip", "x0": pw * 0.55, "y0": 20, "x1": pw - 10, "y1": ph - 20},
+        {"name": "bottom-strip", "x0": 10, "y0": ph * 0.7, "x1": pw - 10, "y1": ph - 20},
+        {"name": "top-right", "x0": pw * 0.55, "y0": 20, "x1": pw - 10, "y1": ph * 0.3},
+        {"name": "bottom-right", "x0": pw * 0.55, "y0": ph * 0.5, "x1": pw - 10, "y1": ph - 20},
+        {"name": "left-strip", "x0": 10, "y0": 20, "x1": pw * 0.28, "y1": ph - 20},
+    ]
+    
+    for candidate in candidates:
+        cx0, cy0, cx1, cy1 = candidate["x0"], candidate["y0"], candidate["x1"], candidate["y1"]
+        if cx1 - cx0 < min_width or cy1 - cy0 < min_height:
+            continue
+        overlaps = False
+        for pb in placed_boxes:
+            if boxes_overlap([cx0, cy0, cx1, cy1], pb):
+                overlaps = True
+                break
+        if not overlaps:
+            return [cx0, cy0, cx1, cy1]
+    return None
+
+
+def apply_translations_numbered(
+    pdf_path: str, page_num: int,
+    translations: List[Dict],
+    output_path: str,
+    font_path: Optional[str] = None,
+    font_size: float = 10.0,
+    marker_color: Tuple = (0.9, 0.32, 0.0),
+) -> str:
+    """Apply translations using numbered markers: place circled numbers
+    at original text locations, list all translations in a table at a
+    large empty zone. Avoids overlapping drawing content."""
+    doc = fitz.open(pdf_path)
+    page = doc[page_num]
+    pw, ph = page.rect.width, page.rect.height
+    
+    if font_path and os.path.exists(font_path):
+        try:
+            page.insert_font(fontname="vfont", fontfile=font_path)
+            use_font = "vfont"
+        except Exception:
+            use_font = "china-s"
+    else:
+        use_font = "helv"
+    
+    circled = ["\u2460", "\u2461", "\u2462", "\u2463", "\u2464",
+               "\u2465", "\u2466", "\u2467", "\u2468", "\u2469",
+               "\u246a", "\u246b", "\u246c", "\u246d", "\u246e",
+               "\u246f", "\u2470", "\u2471", "\u2472", "\u2473"]
+    
+    marker_boxes = []
+    valid_translations = []
+    marker_font_size = max(font_size, 9.0)
+    
+    for idx, item in enumerate(translations):
+        text = item.get("translated_text", "")
+        if not text:
+            continue
+        bbox = item["bbox"]
+        marker = circled[idx] if idx < len(circled) else f"({idx+1})"
+        page.insert_text(
+            (bbox[0] - 2, bbox[1] - 2),
+            marker,
+            fontname=use_font,
+            fontsize=marker_font_size,
+            color=marker_color,
+            render_mode=0,
+        )
+        marker_boxes.append([bbox[0] - 15, bbox[1] - 15, bbox[0] + 15, bbox[3] + 5])
+        valid_translations.append({
+            "marker": marker,
+            "original": item.get("text", ""),
+            "translated": text,
+        })
+    
+    if not valid_translations:
+        doc.close()
+        return output_path
+    
+    zone = find_largest_empty_zone([0, 0, pw, ph], marker_boxes)
+    if not zone:
+        zone = [20, ph * 0.55, pw * 0.45, ph - 20]
+    
+    table_x = zone[0] + 8
+    table_y = zone[1] + 8
+    table_font_size = max(font_size, 9.0)
+    line_height = table_font_size * 1.5
+    col1_w = 30
+    col_gap = 8
+    
+    # Table header
+    page.insert_text(
+        (table_x, table_y + table_font_size * 0.8),
+        "D\u1ecbch thu\u1eadt / \u7ffb\u8bd1",
+        fontname=use_font,
+        fontsize=table_font_size + 1,
+        color=(0.1, 0.1, 0.1),
+        render_mode=0,
+    )
+    table_y += line_height + 4
+    page.draw_line(
+        (table_x, table_y), (zone[2] - 8, table_y),
+        color=(0.7, 0.7, 0.7), width=0.5
+    )
+    table_y += 4
+    
+    for entry in valid_translations:
+        if table_y + line_height > zone[3] - 10:
+            break
+        page.insert_text(
+            (table_x, table_y + table_font_size * 0.8),
+            entry["marker"],
+            fontname=use_font, fontsize=table_font_size,
+            color=marker_color, render_mode=0,
+        )
+        page.insert_text(
+            (table_x + col1_w, table_y + table_font_size * 0.8),
+            "\u2192",
+            fontname=use_font, fontsize=table_font_size,
+            color=(0.5, 0.5, 0.5), render_mode=0,
+        )
+        page.insert_text(
+            (table_x + col1_w + col_gap + 6, table_y + table_font_size * 0.8),
+            entry["translated"],
+            fontname=use_font, fontsize=table_font_size,
+            color=(0.9, 0.32, 0.0), render_mode=0,
+        )
+        table_y += line_height
+    
     doc.save(output_path)
     doc.close()
     return output_path

@@ -207,204 +207,7 @@ document.querySelectorAll(".engine-btn").forEach(btn => {
 <script src="/static/js/api.js"></script>
 <script src="/static/js/viewer.js"></script>
 <script src="/static/js/app.js"></script>
-<script>
-// Settings panel management
-(function() {
-    var overlay = document.getElementById('settings-overlay');
-    var currentTab = 'engines';
 
-    document.getElementById('btn-open-settings').addEventListener('click', function() {
-        overlay.classList.remove('hidden');
-        loadCurrentTab();
-    });
-    document.getElementById('btn-close-settings').addEventListener('click', function() {
-        overlay.classList.add('hidden');
-    });
-    overlay.addEventListener('click', function(e) {
-        if (e.target === overlay) overlay.classList.add('hidden');
-    });
-
-    // Tab switching
-    document.querySelectorAll('.settings-tab').forEach(function(tab) {
-        tab.addEventListener('click', function() {
-            var target = this.dataset.tab;
-            currentTab = target;
-            document.querySelectorAll('.settings-tab').forEach(function(t) { t.classList.remove('active'); });
-            this.classList.add('active');
-            document.querySelectorAll('.settings-tab-content').forEach(function(c) { c.classList.add('hidden'); });
-            document.getElementById('tab-' + target).classList.remove('hidden');
-            loadCurrentTab();
-        });
-    });
-
-    // Engine selector in settings
-    document.querySelectorAll('#settings-engine-selector .engine-btn').forEach(function(btn) {
-        btn.addEventListener('click', function() {
-            document.querySelectorAll('#settings-engine-selector .engine-btn').forEach(function(b) { b.classList.remove('active'); });
-            this.classList.add('active');
-            var engine = this.dataset.engine;
-            document.getElementById('settings-api-keys').classList.toggle('hidden', engine === 'google');
-        });
-    });
-
-    // Test pipeline
-    document.getElementById('btn-test-pipeline').addEventListener('click', function() {
-        var engine = document.querySelector('#settings-engine-selector .engine-btn.active').dataset.engine;
-        var apiKey = document.getElementById('settings-api-key').value;
-        var useTM = document.getElementById('chk-use-tm').checked;
-        var useGloss = document.getElementById('chk-use-glossary').checked;
-        var useSyn = document.getElementById('chk-use-synonyms').checked;
-        var resultDiv = document.getElementById('test-pipeline-result');
-        resultDiv.innerHTML = '<span class="spinner"></span> Đang kiểm tra...';
-        
-        fetch('/api/translator/test', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                texts: ['活动层板', '三合一连接件', '侧板钻孔图', '注意安装方向'],
-                engine: engine,
-                api_key: apiKey,
-                use_tm: useTM,
-                use_glossary: useGloss,
-                use_synonyms: useSyn
-            })
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.error) { resultDiv.innerHTML = '<span style="color:red">' + data.error + '</span>'; return; }
-            var html = '<table style="width:100%;border-collapse:collapse;font-size:0.78rem"><tr><th>原文 / Gốc</th><th>归一化</th><th>译文 / Dịch</th><th>来源</th></tr>';
-            data.results.forEach(function(r) {
-                var src = r.from_tm ? 'TM' : (r.synonym_applied ? 'Syn+API' : 'API');
-                html += '<tr><td>' + r.original + '</td><td>' + (r.normalized || '-') + '</td><td style="color:var(--primary)">' + r.translated + '</td><td>' + src + '</td></tr>';
-            });
-            html += '</table>';
-            html += '<p style="margin-top:8px">引擎: \' + data.engine + \' | TM: \' + data.stats.tm_entries + \'条 | 术语库: \' + data.stats.glossary_terms + \'条 | 同义词: \' + data.stats.synonym_rules + \'条iv.innerHTML = html;
-            loadTMStats();
-        });
-    });
-
-    // Glossary management
-    document.getElementById('btn-add-glossary').addEventListener('click', function() {
-        var cn = document.getElementById('glossary-cn').value.trim();
-        var vi = document.getElementById('glossary-vi').value.trim();
-        if (!cn || !vi) return;
-        fetch('/api/translator/glossary', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({chinese: cn, vietnamese: vi})
-        }).then(function() {
-            document.getElementById('glossary-cn').value = '';
-            document.getElementById('glossary-vi').value = '';
-            loadGlossary();
-        });
-    });
-
-    function loadGlossary() {
-        fetch('/api/translator/glossary').then(function(r) { return r.json(); }).then(function(data) {
-            var list = document.getElementById('glossary-list');
-            if (!data.glossary || data.glossary.length === 0) {
-                list.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Chưa có thuật ngữ</div>';
-                return;
-            }
-            list.innerHTML = data.glossary.map(function(item) {
-                return '<div class="glossary-row"><span class="cn">' + item.chinese + '</span><span class="arrow">→</span><span class="vi">' + item.vietnamese + '</span><button class="delete-btn" data-cn="' + item.chinese + '">&times;</button></div>';
-            }).join('');
-            list.querySelectorAll('.delete-btn').forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    fetch('/api/translator/glossary/' + encodeURIComponent(this.dataset.cn), {method: 'DELETE'}).then(function() { loadGlossary(); });
-                });
-            });
-        });
-    }
-
-    // Synonyms management
-    document.getElementById('btn-add-synonym').addEventListener('click', function() {
-        var variant = document.getElementById('synonym-variant').value.trim();
-        var standard = document.getElementById('synonym-standard').value.trim();
-        if (!variant || !standard) return;
-        fetch('/api/translator/synonyms', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({variant: variant, standard: standard})
-        }).then(function() {
-            document.getElementById('synonym-variant').value = '';
-            document.getElementById('synonym-standard').value = '';
-            loadSynonyms();
-        });
-    });
-
-    function loadSynonyms() {
-        fetch('/api/translator/synonyms').then(function(r) { return r.json(); }).then(function(data) {
-            var list = document.getElementById('synonym-list');
-            if (!data.synonyms || data.synonyms.length === 0) {
-                list.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Chưa có quy tắc đồng nghĩa</div>';
-                return;
-            }
-            list.innerHTML = data.synonyms.map(function(item) {
-                return '<div class="synonym-row"><span class="cn">' + item.variant + '</span><span class="arrow">→</span><span class="vi">' + item.standard + '</span><button class="delete-btn" data-var="' + item.variant + '">&times;</button></div>';
-            }).join('');
-            list.querySelectorAll('.delete-btn').forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    fetch('/api/translator/synonyms/' + encodeURIComponent(this.dataset.var), {method: 'DELETE'}).then(function() { loadSynonyms(); });
-                });
-            });
-        });
-    }
-
-    // TM management
-    function loadTMStats() {
-        fetch('/api/translator/tm').then(function(r) { return r.json(); }).then(function(data) {
-            var s = data.stats;
-            document.getElementById('tm-stats-display').innerHTML = '<strong>TM:</strong> ' + s.tm_entries + '条 | <strong>术语库:</strong> ' + s.glossary_terms + '条 | <strong>同义词:</strong> ' + s.synonym_rules + '条';
-            document.getElementById('tm-stats-detailed').innerHTML = '<strong>Entries:</strong> ' + s.tm_entries + ' | <strong>Glossary:</strong> ' + s.glossary_terms + ' | <strong>Synonyms:</strong> ' + s.synonym_rules;
-            
-            var list = document.getElementById('tm-entries');
-            if (!data.entries || data.entries.length === 0) {
-                list.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Chưa có bản dịch nào</div>';
-                return;
-            }
-            list.innerHTML = data.entries.map(function(item) {
-                return '<div class="tm-row"><span class="src">' + item.source + '</span><span class="arrow">→</span><span class="dest">' + item.translation + '</span></div>';
-            }).join('');
-        });
-    }
-
-    document.getElementById('btn-export-tm').addEventListener('click', function() {
-        window.open('/api/translator/tm/export', '_blank');
-    });
-
-    document.getElementById('btn-import-tm').addEventListener('click', function() {
-        document.getElementById('tm-import-file').click();
-    });
-
-    document.getElementById('tm-import-file').addEventListener('change', function() {
-        var file = this.files[0];
-        if (!file) return;
-        var form = new FormData();
-        form.append('file', file);
-        fetch('/api/translator/tm/import', {method: 'POST', body: form}).then(function(r) { return r.json(); }).then(function(data) {
-            alert('Đã nhập ' + data.imported + ' mục. Tổng cộng: data.total_entries);
-            loadTMStats();
-        });
-    });
-
-    document.getElementById('btn-clear-tm').addEventListener('click', function() {
-        if (!confirm('Xóa tất cả bản dịch đã lưu?')) return;
-        fetch('/api/translator/tm/clear', {method: 'POST'}).then(function() { loadTMStats(); });
-    });
-
-    function loadCurrentTab() {
-        if (currentTab === 'glossary') loadGlossary();
-        else if (currentTab === 'synonyms') loadSynonyms();
-        else if (currentTab === 'tm') loadTMStats();
-        else loadTMStats();
-    }
-
-    // Init
-    loadTMStats();
-})();
-
-// ============================================================
 // DXF Import Flow
 // ============================================================
 (function() {
@@ -797,5 +600,203 @@ document.querySelectorAll(".engine-btn").forEach(btn => {
 
 /* Empty state */
 .text-muted { color:var(--text-muted); }
-</style></body>
+</style>
+<script>
+// Settings panel management
+(function() {
+    var overlay = document.getElementById('settings-overlay');
+    var currentTab = 'engines';
+
+    document.getElementById('btn-open-settings').addEventListener('click', function() {
+        overlay.classList.remove('hidden');
+        loadCurrentTab();
+    });
+    document.getElementById('btn-close-settings').addEventListener('click', function() {
+        overlay.classList.add('hidden');
+    });
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) overlay.classList.add('hidden');
+    });
+
+    // Tab switching
+    document.querySelectorAll('.settings-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            var target = this.dataset.tab;
+            currentTab = target;
+            document.querySelectorAll('.settings-tab').forEach(function(t) { t.classList.remove('active'); });
+            this.classList.add('active');
+            document.querySelectorAll('.settings-tab-content').forEach(function(c) { c.classList.add('hidden'); });
+            document.getElementById('tab-' + target).classList.remove('hidden');
+            loadCurrentTab();
+        });
+    });
+
+    // Engine selector in settings
+    document.querySelectorAll('#settings-engine-selector .engine-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('#settings-engine-selector .engine-btn').forEach(function(b) { b.classList.remove('active'); });
+            this.classList.add('active');
+            var engine = this.dataset.engine;
+            document.getElementById('settings-api-keys').classList.toggle('hidden', engine === 'google');
+        });
+    });
+
+    // Test pipeline
+    document.getElementById('btn-test-pipeline').addEventListener('click', function() {
+        var engine = document.querySelector('#settings-engine-selector .engine-btn.active').dataset.engine;
+        var apiKey = document.getElementById('settings-api-key').value;
+        var useTM = document.getElementById('chk-use-tm').checked;
+        var useGloss = document.getElementById('chk-use-glossary').checked;
+        var useSyn = document.getElementById('chk-use-synonyms').checked;
+        var resultDiv = document.getElementById('test-pipeline-result');
+        resultDiv.innerHTML = '<span class="spinner"></span> Đang kiểm tra...';
+        
+        fetch('/api/translator/test', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                texts: ['活动层板', '三合一连接件', '侧板钻孔图', '注意安装方向'],
+                engine: engine,
+                api_key: apiKey,
+                use_tm: useTM,
+                use_glossary: useGloss,
+                use_synonyms: useSyn
+            })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) { resultDiv.innerHTML = '<span style="color:red">' + data.error + '</span>'; return; }
+            var html = '<table style="width:100%;border-collapse:collapse;font-size:0.78rem"><tr><th>原文 / Gốc</th><th>归一化</th><th>译文 / Dịch</th><th>来源</th></tr>';
+            data.results.forEach(function(r) {
+                var src = r.from_tm ? 'TM' : (r.synonym_applied ? 'Syn+API' : 'API');
+                html += '<tr><td>' + r.original + '</td><td>' + (r.normalized || '-') + '</td><td style="color:var(--primary)">' + r.translated + '</td><td>' + src + '</td></tr>';
+            });
+            html += '</table>';
+            html += '<p style="margin-top:8px">引擎: \' + data.engine + \' | TM: \' + data.stats.tm_entries + \'条 | 术语库: \' + data.stats.glossary_terms + \'条 | 同义词: \' + data.stats.synonym_rules + \'条iv.innerHTML = html;
+            loadTMStats();
+        });
+    });
+
+    // Glossary management
+    document.getElementById('btn-add-glossary').addEventListener('click', function() {
+        var cn = document.getElementById('glossary-cn').value.trim();
+        var vi = document.getElementById('glossary-vi').value.trim();
+        if (!cn || !vi) return;
+        fetch('/api/translator/glossary', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({chinese: cn, vietnamese: vi})
+        }).then(function() {
+            document.getElementById('glossary-cn').value = '';
+            document.getElementById('glossary-vi').value = '';
+            loadGlossary();
+        });
+    });
+
+    function loadGlossary() {
+        fetch('/api/translator/glossary').then(function(r) { return r.json(); }).then(function(data) {
+            var list = document.getElementById('glossary-list');
+            if (!data.glossary || data.glossary.length === 0) {
+                list.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Chưa có thuật ngữ</div>';
+                return;
+            }
+            list.innerHTML = data.glossary.map(function(item) {
+                return '<div class="glossary-row"><span class="cn">' + item.chinese + '</span><span class="arrow">→</span><span class="vi">' + item.vietnamese + '</span><button class="delete-btn" data-cn="' + item.chinese + '">&times;</button></div>';
+            }).join('');
+            list.querySelectorAll('.delete-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    fetch('/api/translator/glossary/' + encodeURIComponent(this.dataset.cn), {method: 'DELETE'}).then(function() { loadGlossary(); });
+                });
+            });
+        });
+    }
+
+    // Synonyms management
+    document.getElementById('btn-add-synonym').addEventListener('click', function() {
+        var variant = document.getElementById('synonym-variant').value.trim();
+        var standard = document.getElementById('synonym-standard').value.trim();
+        if (!variant || !standard) return;
+        fetch('/api/translator/synonyms', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({variant: variant, standard: standard})
+        }).then(function() {
+            document.getElementById('synonym-variant').value = '';
+            document.getElementById('synonym-standard').value = '';
+            loadSynonyms();
+        });
+    });
+
+    function loadSynonyms() {
+        fetch('/api/translator/synonyms').then(function(r) { return r.json(); }).then(function(data) {
+            var list = document.getElementById('synonym-list');
+            if (!data.synonyms || data.synonyms.length === 0) {
+                list.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Chưa có quy tắc đồng nghĩa</div>';
+                return;
+            }
+            list.innerHTML = data.synonyms.map(function(item) {
+                return '<div class="synonym-row"><span class="cn">' + item.variant + '</span><span class="arrow">→</span><span class="vi">' + item.standard + '</span><button class="delete-btn" data-var="' + item.variant + '">&times;</button></div>';
+            }).join('');
+            list.querySelectorAll('.delete-btn').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    fetch('/api/translator/synonyms/' + encodeURIComponent(this.dataset.var), {method: 'DELETE'}).then(function() { loadSynonyms(); });
+                });
+            });
+        });
+    }
+
+    // TM management
+    function loadTMStats() {
+        fetch('/api/translator/tm').then(function(r) { return r.json(); }).then(function(data) {
+            var s = data.stats;
+            document.getElementById('tm-stats-display').innerHTML = '<strong>TM:</strong> ' + s.tm_entries + '条 | <strong>术语库:</strong> ' + s.glossary_terms + '条 | <strong>同义词:</strong> ' + s.synonym_rules + '条';
+            document.getElementById('tm-stats-detailed').innerHTML = '<strong>Entries:</strong> ' + s.tm_entries + ' | <strong>Glossary:</strong> ' + s.glossary_terms + ' | <strong>Synonyms:</strong> ' + s.synonym_rules;
+            
+            var list = document.getElementById('tm-entries');
+            if (!data.entries || data.entries.length === 0) {
+                list.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Chưa có bản dịch nào</div>';
+                return;
+            }
+            list.innerHTML = data.entries.map(function(item) {
+                return '<div class="tm-row"><span class="src">' + item.source + '</span><span class="arrow">→</span><span class="dest">' + item.translation + '</span></div>';
+            }).join('');
+        });
+    }
+
+    document.getElementById('btn-export-tm').addEventListener('click', function() {
+        window.open('/api/translator/tm/export', '_blank');
+    });
+
+    document.getElementById('btn-import-tm').addEventListener('click', function() {
+        document.getElementById('tm-import-file').click();
+    });
+
+    document.getElementById('tm-import-file').addEventListener('change', function() {
+        var file = this.files[0];
+        if (!file) return;
+        var form = new FormData();
+        form.append('file', file);
+        fetch('/api/translator/tm/import', {method: 'POST', body: form}).then(function(r) { return r.json(); }).then(function(data) {
+            alert('Đã nhập ' + data.imported + ' mục. Tổng cộng: data.total_entries);
+            loadTMStats();
+        });
+    });
+
+    document.getElementById('btn-clear-tm').addEventListener('click', function() {
+        if (!confirm('Xóa tất cả bản dịch đã lưu?')) return;
+        fetch('/api/translator/tm/clear', {method: 'POST'}).then(function() { loadTMStats(); });
+    });
+
+    function loadCurrentTab() {
+        if (currentTab === 'glossary') loadGlossary();
+        else if (currentTab === 'synonyms') loadSynonyms();
+        else if (currentTab === 'tm') loadTMStats();
+        else loadTMStats();
+    }
+
+    // Init
+    loadTMStats();
+})()
+</script>
+</body>
 </html>

@@ -212,93 +212,199 @@ document.querySelectorAll(".engine-btn").forEach(btn => {
 <div id="settings-overlay" class="hidden">
 <div class="settings-modal">
 <div class="settings-header">
-<h2>Translator v2 Settings / Cài đặt phiên dịch</h2>
-<button id="btn-close-settings" class="btn btn-sm">&times;</button>
+<h2>翻译设置 / Cài đặt phiên dịch</h2>
+<button id="btn-close-settings" class="btn-close-settings">&times;</button>
 </div>
 <div class="settings-body">
 <div class="settings-tabs">
-<button class="settings-tab active" data-tab="engines">Translation / Dịch</button>
-<button class="settings-tab" data-tab="glossary">Glossary / Thuật ngữ</button>
-<button class="settings-tab" data-tab="synonyms">Synonyms / Đồng nghĩa</button>
-<button class="settings-tab" data-tab="tm">TM / Bộ nhớ dịch</button>
+<button class="settings-tab active" data-tab="engines">引擎 / Động cơ</button>
+<button class="settings-tab" data-tab="glossary">术语库 / Thuật ngữ</button>
+<button class="settings-tab" data-tab="synonyms">同义词 / Đồng nghĩa</button>
+<button class="settings-tab" data-tab="tm">翻译记忆 / Bộ nhớ dịch</button>
 </div>
 
 <!-- Translation Tab -->
 <div id="tab-engines" class="settings-tab-content active">
-<h4>Translation Engine / Công cụ dịch</h4>
+<div class="section-block">
+<h4 class="section-title">🔧 翻译引擎 / Động cơ dịch</h4>
 <div class="engine-selector" id="settings-engine-selector">
-<div class="engine-btn active" data-engine="google">Google</div>
-<div class="engine-btn" data-engine="deepseek">DeepSeek</div>
-<div class="engine-btn" data-engine="gemini">Gemini</div>
+<div class="engine-btn active" data-engine="google">Google 翻译</div>
+<div class="engine-btn" data-engine="deepseek">DeepSeek AI</div>
+<div class="engine-btn" data-engine="gemini">Gemini AI</div>
 </div>
-<div id="settings-api-keys" class="hidden" style="margin-top:12px">
-<label>API Key:</label>
-<input type="password" id="settings-api-key" placeholder="sk-... or AIza..." style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:4px">
-<button class="btn btn-sm btn-outline" id="btn-settings-test-key">Test Key</button>
+<div id="settings-api-keys" class="hidden section-block">
+<label style="font-size:0.85rem;font-weight:500;display:block;margin-bottom:6px">API 密钥 / Khóa API:</label>
+<div style="display:flex;gap:8px">
+<input type="password" id="settings-api-key" placeholder="sk-... hoặc AIza..." style="flex:1;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.9rem">
+<button class="btn btn-sm btn-outline" id="btn-settings-test-key">测试</button>
 </div>
-<hr>
-<h4>Pipeline Options / Tùy chọn pipeline</h4>
-<label style="display:flex;align-items:center;gap:8px;margin:8px 0">
-<input type="checkbox" id="chk-use-tm" checked> Translation Memory (cache)
+</div>
+</div>
+
+<div class="section-divider"></div>
+
+<div class="section-block">
+<h4 class="section-title">⚙ 处理选项 / Tùy chọn xử lý</h4>
+<label style="display:flex;align-items:center;gap:10px;margin:10px 0;padding:8px 0">
+<input type="checkbox" id="chk-use-tm" checked>
+<span style="font-size:0.9rem">翻译记忆缓存 / Bộ nhớ dịch</span>
 </label>
-<label style="display:flex;align-items:center;gap:8px;margin:8px 0">
-<input type="checkbox" id="chk-use-glossary" checked> Enterprise Glossary (术语库)
+<label style="display:flex;align-items:center;gap:10px;margin:10px 0;padding:8px 0">
+<input type="checkbox" id="chk-use-glossary" checked>
+<span style="font-size:0.9rem">企业术语库锁定 / Khóa thuật ngữ</span>
 </label>
-<label style="display:flex;align-items:center;gap:8px;margin:8px 0">
-<input type="checkbox" id="chk-use-synonyms" checked> Synonym Normalization (同义词归一)
+<label style="display:flex;align-items:center;gap:10px;margin:10px 0;padding:8px 0">
+<input type="checkbox" id="chk-use-synonyms" checked>
+<span style="font-size:0.9rem">同义词归一化 / Chuẩn hóa đồng nghĩa</span>
 </label>
-<button class="btn btn-outline" id="btn-test-pipeline" style="margin-top:12px">Test Pipeline</button>
-<div id="test-pipeline-result" style="margin-top:12px;font-size:0.8rem;max-height:200px;overflow:auto"></div>
-<hr>
-<div class="tm-stats" id="tm-stats-display"></div>
+</div>
+
+<div class="section-divider"></div>
+
+<div class="section-block">
+<button class="btn btn-outline" id="btn-test-pipeline">🧪 测试管线 / Kiểm tra pipeline</button>
+<div id="test-pipeline-result" style="margin-top:14px;font-size:0.8rem;max-height:200px;overflow:auto"></div>
+<div id="tm-stats-display" style="margin-top:10px;font-size:0.82rem;color:var(--text-muted)"></div>
+</div>
 </div>
 
 <!-- Glossary Tab -->
 <div id="tab-glossary" class="settings-tab-content hidden">
-<h4>Enterprise Glossary / Thuật ngữ chuyên ngành</h4>
-<div style="display:flex;gap:8px;margin:12px 0">
-<input id="glossary-cn" placeholder="Chinese term" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:4px">
-<input id="glossary-vi" placeholder="Vietnamese translation" style="flex:2;padding:6px;border:1px solid var(--border);border-radius:4px">
-<button class="btn btn-sm btn-primary" id="btn-add-glossary">Add</button>
+<div class="section-block">
+<h4 class="section-title">📖 企业术语库 / Thuật ngữ chuyên ngành</h4>
+<p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 12px">锁定固定翻译，避免同一术语被译成不同版本</p>
+<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+<input id="glossary-cn" placeholder="中文术语" style="flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.9rem">
+<input id="glossary-vi" placeholder="越南语翻译" style="flex:1;min-width:160px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.9rem">
+<button class="btn btn-sm btn-primary" id="btn-add-glossary">添加</button>
 </div>
-<div id="glossary-list" style="max-height:300px;overflow:auto;font-size:0.8rem">
-<div class="text-muted" style="padding:20px;text-align:center">Loading...</div>
+<div id="glossary-list" style="max-height:320px;overflow:auto"></div>
 </div>
 </div>
 
 <!-- Synonyms Tab -->
 <div id="tab-synonyms" class="settings-tab-content hidden">
-<h4>Synonym Normalization / Chuẩn hóa đồng nghĩa</h4>
-<p style="font-size:0.8rem;color:var(--text-muted)">Map variant terms → standard term (e.g. 活动层板 → 层板)</p>
-<div style="display:flex;gap:8px;margin:12px 0">
-<input id="synonym-variant" placeholder="Variant (e.g. 活动层板)" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:4px">
-<input id="synonym-standard" placeholder="Standard (e.g. 层板)" style="flex:1;padding:6px;border:1px solid var(--border);border-radius:4px">
-<button class="btn btn-sm btn-primary" id="btn-add-synonym">Add</button>
+<div class="section-block">
+<h4 class="section-title">🔄 同义词归一化 / Chuẩn hóa đồng nghĩa</h4>
+<p style="font-size:0.82rem;color:var(--text-muted);margin:4px 0 12px">将变体词映射为标准词（如：活动层板 → 层板），减少 API 调用</p>
+<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+<input id="synonym-variant" placeholder="变体词（例：活动层板）" style="flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.9rem">
+<input id="synonym-standard" placeholder="标准词（例：层板）" style="flex:1;min-width:120px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:0.9rem">
+<button class="btn btn-sm btn-primary" id="btn-add-synonym">添加</button>
 </div>
-<div id="synonym-list" style="max-height:300px;overflow:auto;font-size:0.8rem">
-<div class="text-muted" style="padding:20px;text-align:center">Loading...</div>
+<div id="synonym-list" style="max-height:320px;overflow:auto"></div>
 </div>
 </div>
 
 <!-- TM Tab -->
 <div id="tab-tm" class="settings-tab-content hidden">
-<h4>Translation Memory / Bộ nhớ dịch</h4>
-<div id="tm-stats-detailed" style="margin:12px 0;font-size:0.85rem"></div>
-<div style="display:flex;gap:8px;margin:12px 0">
-<button class="btn btn-outline" id="btn-export-tm">Export TM</button>
+<div class="section-block">
+<h4 class="section-title">💾 翻译记忆 / Bộ nhớ dịch</h4>
+<div id="tm-stats-detailed" style="margin:10px 0;padding:10px 14px;background:#f0f7ff;border-radius:6px;font-size:0.85rem"></div>
+<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+<button class="btn btn-outline btn-sm" id="btn-export-tm">📤 导出 TM</button>
+<button class="btn btn-outline btn-sm" id="btn-import-tm">📥 导入 TM</button>
+<button class="btn btn-outline btn-sm" id="btn-clear-tm" style="color:var(--danger);border-color:var(--danger)">🗑 清空全部</button>
 <input type="file" id="tm-import-file" accept=".json" style="display:none">
-<button class="btn btn-outline" id="btn-import-tm">Import TM</button>
-<button class="btn btn-outline btn-danger" id="btn-clear-tm">Clear All</button>
 </div>
-<div id="tm-entries" style="max-height:300px;overflow:auto;font-size:0.8rem">
-<div class="text-muted" style="padding:20px;text-align:center">Loading...</div>
+<div id="tm-entries" style="max-height:320px;overflow:auto"></div>
 </div>
 </div>
 </div>
 </div>
 </div>
 
-<!-- Settings gear button in header -->
+<!-- Settings gear button -->
+<button id="btn-open-settings" class="btn btn-sm btn-outline" style="position:fixed;top:60px;right:16px;z-index:100;padding:6px 10px;font-size:1rem;" title="翻译设置">⚙</button>
+
+<style>
+#settings-overlay {
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,0,0.5);z-index:200;
+    display:flex;justify-content:center;align-items:center;
+}
+.settings-modal {
+    background:#fff;border-radius:10px;
+    width:92%;max-width:720px;max-height:82vh;overflow:hidden;
+    display:flex;flex-direction:column;
+    box-shadow:0 8px 32px rgba(0,0,0,0.25);
+}
+.settings-header {
+    display:flex;justify-content:space-between;align-items:center;
+    padding:18px 24px;
+    background:linear-gradient(135deg,#f8fafc,#eff6ff);
+    border-bottom:1px solid var(--border);
+}
+.settings-header h2 { margin:0;font-size:1.15rem;color:var(--text); }
+.btn-close-settings {
+    background:none;border:none;font-size:1.5rem;cursor:pointer;
+    color:var(--text-muted);padding:4px 8px;border-radius:4px;
+}
+.btn-close-settings:hover { background:#f0f0f0;color:#333; }
+.settings-body { display:flex;flex-direction:column;overflow-y:auto; }
+.settings-tabs {
+    display:flex;border-bottom:2px solid var(--border);
+    padding:0 8px;background:#fafbfc;
+}
+.settings-tab {
+    padding:12px 18px;border:none;background:none;cursor:pointer;
+    font-size:0.88rem;color:var(--text-muted);border-bottom:2px solid transparent;
+    margin-bottom:-2px;transition:all 0.15s;
+}
+.settings-tab:hover { color:var(--text); }
+.settings-tab.active {
+    border-bottom-color:var(--primary);color:var(--primary);font-weight:600;
+}
+.settings-tab-content { padding:20px 24px;flex:1; }
+.settings-tab-content.hidden { display:none; }
+
+/* Section blocks with clear visual separation */
+.section-block {
+    padding:16px 18px;
+    background:#fafbfc;border:1px solid #e8ecf0;border-radius:8px;
+    margin-bottom:14px;
+}
+.section-block:last-child { margin-bottom:0; }
+.section-title {
+    font-size:0.92rem;font-weight:600;color:var(--text);margin:0 0 12px 0;
+}
+.section-divider {
+    height:1px;background:linear-gradient(90deg,transparent,#e2e8f0,transparent);
+    margin:16px 0;
+}
+
+/* List rows */
+.glossary-row, .synonym-row, .tm-row {
+    display:flex;justify-content:space-between;align-items:center;
+    padding:10px 0;border-bottom:1px solid #f0f0f0;
+    gap:10px;
+}
+.glossary-row:last-child, .synonym-row:last-child, .tm-row:last-child {
+    border-bottom:none;
+}
+.glossary-row .cn, .synonym-row .cn {
+    font-weight:600;color:#333;flex:1;min-width:80px;
+}
+.glossary-row .arrow, .synonym-row .arrow {
+    color:#999;font-size:0.85rem;flex-shrink:0;
+}
+.glossary-row .vi, .synonym-row .vi {
+    color:var(--primary);flex:2;min-width:100px;
+}
+.tm-row .src { color:#333;flex:1.5;font-size:0.82rem;word-break:break-word; }
+.tm-row .dest { color:var(--primary);flex:2;font-size:0.82rem;word-break:break-word; }
+.delete-btn {
+    color:#dc3545;background:none;border:none;cursor:pointer;
+    font-size:1.1rem;padding:4px 8px;border-radius:4px;flex-shrink:0;
+}
+.delete-btn:hover { background:#fef2f2; }
+
+/* Stats */
+.tm-stats { padding:10px 14px;background:#f0f7ff;border-radius:6px;font-size:0.82rem;color:var(--text-muted); }
+
+/* Empty state */
+.text-muted { color:var(--text-muted); }
+</style><!-- Settings gear button in header -->
 <button id="btn-open-settings" class="btn btn-sm btn-outline" style="position:fixed;top:60px;right:16px;z-index:100;padding:6px 10px;" title="Translator v2 Settings / Cài đặt">⚙</button>
 
 <style>
@@ -371,7 +477,7 @@ document.querySelectorAll(".engine-btn").forEach(btn => {
         var useGloss = document.getElementById('chk-use-glossary').checked;
         var useSyn = document.getElementById('chk-use-synonyms').checked;
         var resultDiv = document.getElementById('test-pipeline-result');
-        resultDiv.innerHTML = '<span class="spinner"></span> Testing...';
+        resultDiv.innerHTML = '<span class="spinner"></span> Đang kiểm tra...';
         
         fetch('/api/translator/test', {
             method: 'POST',
@@ -388,14 +494,13 @@ document.querySelectorAll(".engine-btn").forEach(btn => {
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.error) { resultDiv.innerHTML = '<span style="color:red">' + data.error + '</span>'; return; }
-            var html = '<table style="width:100%;border-collapse:collapse;font-size:0.78rem"><tr><th>Original</th><th>Normalized</th><th>Translated</th><th>Source</th></tr>';
+            var html = '<table style="width:100%;border-collapse:collapse;font-size:0.78rem"><tr><th>原文 / Gốc</th><th>归一化</th><th>译文 / Dịch</th><th>来源</th></tr>';
             data.results.forEach(function(r) {
                 var src = r.from_tm ? 'TM' : (r.synonym_applied ? 'Syn+API' : 'API');
                 html += '<tr><td>' + r.original + '</td><td>' + (r.normalized || '-') + '</td><td style="color:var(--primary)">' + r.translated + '</td><td>' + src + '</td></tr>';
             });
             html += '</table>';
-            html += '<p style="margin-top:8px">Engine: ' + data.engine + ' | TM: ' + data.stats.tm_entries + ' entries | Glossary: ' + data.stats.glossary_terms + ' terms | Synonyms: ' + data.stats.synonym_rules + ' rules</p>';
-            resultDiv.innerHTML = html;
+            html += '<p style="margin-top:8px">引擎: \' + data.engine + \' | TM: \' + data.stats.tm_entries + \'条 | 术语库: \' + data.stats.glossary_terms + \'条 | 同义词: \' + data.stats.synonym_rules + \'条iv.innerHTML = html;
             loadTMStats();
         });
     });
@@ -420,7 +525,7 @@ document.querySelectorAll(".engine-btn").forEach(btn => {
         fetch('/api/translator/glossary').then(function(r) { return r.json(); }).then(function(data) {
             var list = document.getElementById('glossary-list');
             if (!data.glossary || data.glossary.length === 0) {
-                list.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">No glossary terms</div>';
+                list.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Chưa có thuật ngữ</div>';
                 return;
             }
             list.innerHTML = data.glossary.map(function(item) {
@@ -454,7 +559,7 @@ document.querySelectorAll(".engine-btn").forEach(btn => {
         fetch('/api/translator/synonyms').then(function(r) { return r.json(); }).then(function(data) {
             var list = document.getElementById('synonym-list');
             if (!data.synonyms || data.synonyms.length === 0) {
-                list.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">No synonym rules</div>';
+                list.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Chưa có quy tắc đồng nghĩa</div>';
                 return;
             }
             list.innerHTML = data.synonyms.map(function(item) {
@@ -472,12 +577,12 @@ document.querySelectorAll(".engine-btn").forEach(btn => {
     function loadTMStats() {
         fetch('/api/translator/tm').then(function(r) { return r.json(); }).then(function(data) {
             var s = data.stats;
-            document.getElementById('tm-stats-display').innerHTML = '<strong>TM:</strong> ' + s.tm_entries + ' entries | <strong>Glossary:</strong> ' + s.glossary_terms + ' terms | <strong>Synonyms:</strong> ' + s.synonym_rules + ' rules';
+            document.getElementById('tm-stats-display').innerHTML = '<strong>TM:</strong> ' + s.tm_entries + '条 | <strong>术语库:</strong> ' + s.glossary_terms + '条 | <strong>同义词:</strong> ' + s.synonym_rules + '条';
             document.getElementById('tm-stats-detailed').innerHTML = '<strong>Entries:</strong> ' + s.tm_entries + ' | <strong>Glossary:</strong> ' + s.glossary_terms + ' | <strong>Synonyms:</strong> ' + s.synonym_rules;
             
             var list = document.getElementById('tm-entries');
             if (!data.entries || data.entries.length === 0) {
-                list.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">No cached translations yet</div>';
+                list.innerHTML = '<div class="text-muted" style="padding:20px;text-align:center">Chưa có bản dịch nào</div>';
                 return;
             }
             list.innerHTML = data.entries.map(function(item) {
@@ -500,13 +605,13 @@ document.querySelectorAll(".engine-btn").forEach(btn => {
         var form = new FormData();
         form.append('file', file);
         fetch('/api/translator/tm/import', {method: 'POST', body: form}).then(function(r) { return r.json(); }).then(function(data) {
-            alert('Imported ' + data.imported + ' entries. Total: ' + data.total_entries);
+            alert('Đã nhập ' + data.imported + ' mục. Tổng cộng: data.total_entries);
             loadTMStats();
         });
     });
 
     document.getElementById('btn-clear-tm').addEventListener('click', function() {
-        if (!confirm('Clear all translation memory entries?')) return;
+        if (!confirm('Xóa tất cả bản dịch đã lưu?')) return;
         fetch('/api/translator/tm/clear', {method: 'POST'}).then(function() { loadTMStats(); });
     });
 

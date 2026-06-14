@@ -679,6 +679,9 @@ const App = {
             const saved = JSON.parse(localStorage.getItem("cad_translator_keys") || "{}");
             document.getElementById("deepseek-key").value = saved.deepseek || "";
             document.getElementById("gemini-key").value = saved.gemini || "";
+            // Show the right input field
+            document.getElementById("deepseek-key").style.display = this.engine === "deepseek" ? "" : "none";
+            document.getElementById("gemini-key").style.display = this.engine === "gemini" ? "" : "none";
             this.updateEngineUI();
         } catch (e) {
             // Backend might not be running yet
@@ -696,6 +699,8 @@ const App = {
         document.getElementById("api-key-label").textContent =
             engine === "deepseek" ? "DeepSeek API Key:" :
             engine === "gemini" ? "Gemini API Key:" : "";
+        document.getElementById("deepseek-key").style.display = engine === "deepseek" ? "" : "none";
+        document.getElementById("gemini-key").style.display = engine === "gemini" ? "" : "none";
         this.updateEngineUI();
     },
 
@@ -706,6 +711,8 @@ const App = {
         document.getElementById("api-key-section").classList.toggle(
             "hidden", this.engine === "google"
         );
+        document.getElementById("deepseek-key").style.display = this.engine === "deepseek" ? "" : "none";
+        document.getElementById("gemini-key").style.display = this.engine === "gemini" ? "" : "none";
     },
 
     getApiKey() {

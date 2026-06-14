@@ -137,10 +137,11 @@ def save_tm(tm: Dict[str, str]):
     save_json(TM_PATH, tm)
 
 
-def add_tm_entry(source: str, translation: str):
-    """Add an entry to translation memory."""
+def add_tm_entry(source: str, translation: str, engine: str = "google"):
+    """Add an entry to translation memory (key scoped by engine)."""
     tm = load_tm()
-    tm[source] = translation
+    key = f"{engine}:{source}"
+    tm[key] = translation
     save_tm(tm)
 
 
@@ -242,8 +243,8 @@ def restore_placeholders(translations: List[str], placeholder_map: Dict[str, str
 # Translation Memory (TM)
 # ============================================================
 
-def tm_lookup(texts: List[str]) -> Tuple[List[Optional[str]], List[int]]:
-    """Look up texts in translation memory.
+def tm_lookup(texts: List[str], engine: str = "google") -> Tuple[List[Optional[str]], List[int]]:
+    """Look up texts in translation memory (engine-scoped keys).
     
     Returns:
         (hits, missed_indices)
@@ -255,9 +256,9 @@ def tm_lookup(texts: List[str]) -> Tuple[List[Optional[str]], List[int]]:
     missed = []
     
     for i, text in enumerate(texts):
-        norm_text = text.strip()
-        if norm_text in tm:
-            hits.append(tm[norm_text])
+        key = f"{engine}:{text.strip()}"
+        if key in tm:
+            hits.append(tm[key])
         else:
             hits.append(None)
             missed.append(i)
@@ -555,7 +556,7 @@ def translate(texts: List[str], engine: str = "google",
     to_translate_indices = []  # original indices
     
     if use_tm:
-        hits, missed = tm_lookup(tm_texts)
+        hits, missed = tm_lookup(tm_texts, engine)
         for i, (hit, text) in enumerate(zip(hits, tm_texts)):
             if hit is not None:
                 tm_hits[i] = hit  # cached translation
@@ -609,7 +610,7 @@ def translate(texts: List[str], engine: str = "google",
             raw_translation = api_result.get("translated", norm)
             translation = restore_placeholders([raw_translation], placeholder_map)[0]
             if api_result["success"] and use_tm:
-                add_tm_entry(tm_text, raw_translation)
+                add_tm_entry(tm_text, raw_translation, engine)
             results.append({
                 "original": orig,
                 "normalized": norm,

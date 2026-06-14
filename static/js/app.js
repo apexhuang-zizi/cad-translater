@@ -98,6 +98,8 @@ const App = {
     // === Upload ===
 
     async handleUpload(file) {
+        // DXF files handled by initSettingsPanel (DXF flow)
+        if (file.name.toLowerCase().endsWith(".dxf")) return;
         if (!file.name.toLowerCase().endsWith(".pdf")) {
             this.toast("请选择PDF文件 / Vui lòng chọn file PDF", "error");
             return;

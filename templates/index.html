@@ -429,7 +429,10 @@ document.querySelectorAll(".engine-btn").forEach(btn => {
 .btn-danger:hover { background:#dc3545 !important;color:#fff !important; }
 </style>
 
+<script>console.log('PRE-SETTINGS-TEST', Date.now()); window.__pretest = 1;</script>
+
 <script>
+console.log('SETTINGS-IIFE-START', Date.now());
 // Settings panel management
 (function() {
     window.__dbg = window.__dbg || [];
@@ -835,6 +838,7 @@ document.querySelectorAll(".engine-btn").forEach(btn => {
             alert('Export failed: ' + err.message);
         });
     });
+    console.log('SETTINGS-IIFE-END', Date.now());
 })();
 </script>
 </body>

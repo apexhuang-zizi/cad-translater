@@ -433,13 +433,22 @@ document.querySelectorAll(".engine-btn").forEach(btn => {
 // Settings panel management
 (function() {
     var overlay = document.getElementById('settings-overlay');
-    var currentTab = 'engines';
+    var gearBtn = document.getElementById('btn-open-settings');
+    var closeBtn = document.getElementById('btn-close-settings');
 
-    document.getElementById('btn-open-settings').addEventListener('click', function() {
+    if (!overlay || !gearBtn || !closeBtn) {
+        console.error('Settings panel: missing elements', { overlay: !!overlay, gearBtn: !!gearBtn, closeBtn: !!closeBtn });
+        return;
+    }
+
+    var currentTab = 'engines';
+    window.__settingsReady = true;
+
+    gearBtn.addEventListener('click', function() {
         overlay.classList.remove('hidden');
         loadCurrentTab();
     });
-    document.getElementById('btn-close-settings').addEventListener('click', function() {
+    closeBtn.addEventListener('click', function() {
         overlay.classList.add('hidden');
     });
     overlay.addEventListener('click', function(e) {

@@ -432,17 +432,23 @@ document.querySelectorAll(".engine-btn").forEach(btn => {
 <script>
 // Settings panel management
 (function() {
+    window.__dbg = window.__dbg || [];
+    window.__dbg.push('iife-enter');
     var overlay = document.getElementById('settings-overlay');
     var gearBtn = document.getElementById('btn-open-settings');
     var closeBtn = document.getElementById('btn-close-settings');
+    window.__dbg.push('vars-done', !!overlay, !!gearBtn, !!closeBtn);
 
     if (!overlay || !gearBtn || !closeBtn) {
         console.error('Settings panel: missing elements', { overlay: !!overlay, gearBtn: !!gearBtn, closeBtn: !!closeBtn });
+        window.__dbg.push('null-return');
         return;
     }
 
     var currentTab = 'engines';
     window.__settingsReady = true;
+    window.__dbg.push('ready');
+    console.log('Settings IIFE completed successfully');
 
     gearBtn.addEventListener('click', function() {
         overlay.classList.remove('hidden');

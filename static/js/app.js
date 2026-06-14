@@ -871,7 +871,8 @@ function initSettingsPanel() {
                 html += '<tr><td>' + r.original + '</td><td>' + (r.normalized || '-') + '</td><td style="color:var(--primary)">' + r.translated + '</td><td>' + src + '</td></tr>';
             });
             html += '</table>';
-            html += '<p style="margin-top:8px">引擎: \' + data.engine + \' | TM: \' + data.stats.tm_entries + \'条 | 术语库: \' + data.stats.glossary_terms + \'条 | 同义词: \' + data.stats.synonym_rules + \'条iv.innerHTML = html;
+            html += '<p style="margin-top:8px">引擎: ' + data.engine + ' | TM: ' + data.stats.tm_entries + '条 | 术语库: ' + data.stats.glossary_terms + '条 | 同义词: ' + data.stats.synonym_rules + '条</p>';
+            resultDiv.innerHTML = html;
             loadTMStats();
         });
     });
@@ -976,7 +977,7 @@ function initSettingsPanel() {
         var form = new FormData();
         form.append('file', file);
         fetch('/api/translator/tm/import', {method: 'POST', body: form}).then(function(r) { return r.json(); }).then(function(data) {
-            alert('Đã nhập ' + data.imported + ' mục. Tổng cộng: data.total_entries);
+            alert('Đã nhập ' + data.imported + ' mục. Tổng cộng: ' + data.total_entries);
             loadTMStats();
         });
     });
